@@ -132,19 +132,24 @@ from synapserag import SynapseEngine, SynapseConfig
 engine = SynapseEngine(config=SynapseConfig(storage_dir="./data/synapse_db"))
 
 # Ingest documents or codebases with contextual late-chunking
-engine.ingest(file_path="src/main.py")
-engine.ingest(text="Project documentation...", doc_id="doc_01")
+engine.ingest_file("src/main.py")
+engine.ingest_text("Project documentation...", uri="doc_01")
 
 # Query with Tri-Brain fusion
 results = engine.query(
     "How does the memory synchronization work across multi-hop nodes?",
-    mode="hybrid", # "hybrid" | "late_interaction" | "graph_hop" | "lexical"
+    mode="hybrid", # "hybrid" | "late_interaction" | "graph_hop" | "lexical" | "auto"
     top_k=10
 )
 
-for r in results.matches:
-    print(f"[{r.score:.3f}] {r.file_path}:{r.line_number} -> {r.text_snippet}")
+# `matches` and `citations` are parallel lists — citations carry the
+# file/line/char grounding, matches carry the per-channel scores.
+for match, citation in zip(results.matches, results.citations):
+    print(f"[{match.score:.3f}] {citation.uri}:{citation.start_line} -> {citation.exact_quote}")
 ```
+
+A full runnable version of this — pointed at SynapseRAG's own source code — lives in
+[`examples/quickstart_demo.py`](examples/quickstart_demo.py).
 
 By default, `SynapseConfig.embedding_backend="auto"` uses the real
 `sentence-transformers/all-MiniLM-L6-v2` model when the `sentence-transformers`

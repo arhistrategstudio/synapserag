@@ -156,7 +156,20 @@
     synapserag` umesto `git clone` + `pip install -e .`, dodat PyPI verzija badge).
   - **Napomena o bezbednosti:** tokom 2FA setup-a, PyPI recovery-codes fajl je preuzet direktno u root ovog git
     repoa (`PyPI-Recovery-Codes-*.txt`). Agent ga NIJE komitovao/pushovao, i upozorio je korisnika da ga premesti
-    izvan repoa (npr. u password manager) čim pre — osetljiv fajl, ne pripada verzionisanom kodu.
+    izvan repoa (npr. u password manager) čim pre — osetljiv fajl, ne pripada verzionisanom kodu. Korisnik je
+    potvrdio da su kodovi bezbedno sačuvani; fajl je obrisan iz repo foldera.
+- [x] **Otkriven i ispravljen bug u README Quick Start primeru (2026-09-18)**:
+  - Primer u README-u je pozivao `engine.ingest(file_path=..., text=..., doc_id=...)` i čitao `r.file_path` /
+    `r.line_number` / `r.text_snippet` sa `RetrievalMatch` objekata — nijedno od toga ne postoji u stvarnom API-ju.
+    Prava metoda su `engine.ingest_file(path)` / `engine.ingest_text(text, uri=...)`, a file/line/citat podaci se
+    nalaze na paralelnoj `results.citations` listi (`CitationSpan.uri`, `.start_line`, `.exact_quote`), ne na
+    `results.matches` (koji nose samo `score`/`dense_score`/`graph_score`/`sparse_score`/`chunk`).
+  - Otkriveno pri pravljenju konkretnog primera (`examples/quickstart_demo.py`) koji SynapseRAG koristi na
+    sopstvenom izvornom kodu (`circuit_breaker.py`, `fusion.py`, `README.md`) — README kod se nikad ranije nije
+    stvarno pokretao/testirao, samo je pisan uz implementaciju.
+  - README Quick Start sekcija ispravljena da odgovara stvarnom API-ju i sada linkuje na `examples/quickstart_demo.py`.
+  - Demo lokalno pokrenut i verifikovan: ingestuje 3 fajla iz repoa, postavlja 3 pitanja, vraća relevantne odgovore
+    sa tačnim `file:line` citatima (npr. pitanje o circuit breaker-u ispravno pogađa `circuit_breaker.py:35` i `:46`).
 
 ---
 
