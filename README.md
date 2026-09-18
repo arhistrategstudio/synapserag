@@ -194,8 +194,10 @@ pytest tests/ -v
 retrieve → verify pipeline, disk persistence/reload, and per-connector
 edge cases (malformed tool calls, empty corpora, unknown tool/action names).
 CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on every
-push/PR to `main` across Python 3.10–3.13, installing only the core + `dev`
-extra so it also exercises the zero-dependency hash-embedding fallback path.
+push/PR to `main` across Python 3.10–3.13, installing the `dev` and `mcp`
+extras (the MCP connector test needs the `mcp` package) but leaving out
+`sentence-transformers`/`torch`, so it also exercises the zero-dependency
+hash-embedding fallback path.
 
 **Known limitation:** on a very small corpus (e.g. a single ingested
 document), the RRF-normalized confidence score used by the hallucination
