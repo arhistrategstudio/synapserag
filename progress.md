@@ -2,8 +2,8 @@
 
 ## 📌 Status Projekta
 - **Datum pokretanja:** 2026-09-18
-- **Trenutna faza:** Faza 8 završena (realni embedding, persistencija, connector testovi) — sledi Faza 9 (packaging/CI)
-- **Status:** 🟢 Core implementiran i ojačan, testovi prolaze (15/15)
+- **Trenutna faza:** Faza 9 završena (packaging, CI, README) — projekat je pip-instalabilan i ima zeleni CI
+- **Status:** 🟢 Core implementiran i ojačan, testovi prolaze (15/15), CI zeleno na GitHub Actions (Python 3.10-3.13)
 
 ---
 
@@ -99,22 +99,41 @@
   - **Poznato ograničenje (nije bag, zabeleženo za budući rad):** na malom korpusu (1 dokument) RRF-normalizovani confidence skor može biti visok i za semantički nepovezan upit, jer meri relativni rank-konsenzus kroz kanale a ne apsolutnu semantičku sličnost. Circuit breaker je pouzdaniji na većim, realnijim korpusima.
 - Ukupno testova: **15/15 prolazi** (`tests/test_engine.py`, `tests/test_storage.py`, `tests/test_persistence.py`, `tests/test_connectors.py`).
 
+### Faza 9: Packaging & CI (Završeno 2026-09-18)
+- [x] **`pyproject.toml`**: `synapserag` je sada pip-instalabilan paket (`pip install -e .`).
+  - Core paket ostaje **zero-dependency** (`dependencies = []`) — sve u `synapserag/` je stdlib-only, potvrđeno grep-om kroz sve module.
+  - Optional extras: `sentence-transformers`, `torch`, `mcp` (pojedinačno ili `all`), plus `dev` (pytest).
+  - **Bitna napomena:** `mcp` extra je pinovan na `>=1.0.0,<2.0.0` — `mcp` 2.x je preimenovao `FastMCP` u `MCPServer`
+    (`mcp.server.fastmcp` više ne postoji), a naš `connectors/mcp_server.py` je pisan protiv 1.x `FastMCP` API-ja.
+    Bez pina, `pip install ".[mcp]"` povlači 2.x i `test_agent_connectors` tiho puca (ImportError se guta u
+    `try/except` pa `create_mcp_server` baca grešku pri pozivu). Otkriveno i popravljeno tokom CI podešavanja.
+- [x] **GitHub Actions (`.github/workflows/tests.yml`)**: pokreće `pytest tests/` na push/PR prema `main`, matrica Python
+  3.10–3.13. Instalira `.[dev,mcp]` (bez `sentence-transformers`/`torch`) — ovo namerno tera testove da koriste
+  hash-based embedding fallback, pa CI usput validira i zero-dependency putanju. Zeleno na sve 4 verzije Pythona.
+- [x] **`README.md`** ažuriran: CI badge, sekcija za instalaciju (`pip install -e ".[extras]"`), objašnjenje
+  `embedding_backend="auto"` fallback ponašanja, napomena o persistenciji (`persist_on_write`), sekcija
+  Testing & Status sa poznatim ograničenjem circuit breaker-a na malim korpusima.
+- Sav kod je već bio komitovan i pushovan pre ove faze (prethodna napomena o untracked fajlovima u ovom progress.md je bila zastarela — `git status` na početku Faze 9 je bio clean).
+
 ---
 
 ## 📍 Gde smo stali (Current Milestone)
 - Kompletna arhitektura implementirana kroz sve module: storage (vector/graph/sparse), ingest (chunker/embedder/graph_extractor),
   retrieval (PPR, fusion, tri-brain engine), query (clue engine, router), verify (citations, circuit breaker) i svih 6 konektora.
-- Lokalni test paket (`pytest tests/`) prolazi 6/6.
-- Otkriven i ispravljen bug: circuit breaker je poredio ne-normalizovani RRF fuzioni skor (max ~0.016) sa apsolutnim
+- Lokalni test paket (`pytest tests/`) prolazi 15/15, i CI (GitHub Actions) je zeleno na Python 3.10-3.13.
+- Projekat je pip-instalabilan (`pyproject.toml`) sa zero-dep core i optional extras.
+- Otkriven i ispravljen bug (Faza 4): circuit breaker je poredio ne-normalizovani RRF fuzioni skor (max ~0.016) sa apsolutnim
   pragom pouzdanosti od 0.25, zbog čega je gotovo uvek okidao. Fuzioni skor je sada normalizovan u `[0, 1]` u `retrieval/fusion.py`.
-- Kod još nije komitovan u Git (postoji lokalni repo + GitHub remote `origin` -> `arhistrategstudio/synapserag`, ali `synapserag/` i `tests/` su i dalje untracked).
+- Otkriven i ispravljen bug (Faza 9): `mcp` extra bez gornje granice verzije povlači mcp 2.x koji je preimenovao
+  `FastMCP` → `MCPServer`, čime bi `create_mcp_server()` tiho prestao da radi. Pinovano na `mcp>=1.0.0,<2.0.0`.
+- Sve promene su komitovane i pushovane na `origin/main` (`arhistrategstudio/synapserag`) nakon svakog završenog koraka.
 
 ---
 
-## ⏭️ Šta je sledeće (Next Immediate Steps — Faza 9: Packaging & CI)
-1. Dodati `pyproject.toml` (ili `setup.py`) da `synapserag` bude pip-instalabilan paket, sa jasno odvojenim core (zero-dep)
-   i optional extras (`sentence-transformers`, `torch`, `mcp`) zavisnostima.
-2. Dodati GitHub Actions workflow (`.github/workflows/tests.yml`) koji pokreće `pytest tests/` na svaki push/PR.
-3. Razmotriti poboljšanje circuit breaker confidence metrike da bude robusnija na malim korpusima (trenutno RRF-normalizovan
-   skor meri relativni rank-konsenzus kroz kanale, ne apsolutnu semantičku sličnost — vidi napomenu u Faza 8).
-4. Pregledati i ažurirati `README.md` da odražava trenutno stanje implementacije (svi moduli + realni embedding backend).
+## ⏭️ Šta je sledeće (Next Immediate Steps — Faza 10 ideje)
+1. **Objaviti na PyPI** (opciono) ako se želi `pip install synapserag` bez kloniranja repoa — trenutno instalacija je samo iz lokalnog kloniranog repoa.
+2. **Poboljšati circuit breaker confidence metriku** da bude robusnija na malim korpusima (trenutno RRF-normalizovan
+   skor meri relativni rank-konsenzus kroz kanale, ne apsolutnu semantičku sličnost — vidi napomenu u Faza 8/README).
+3. **Pratiti `mcp` SDK 2.x migraciju** — trenutno pinovano na `<2.0.0` da radi sa `FastMCP`; kad/ako se odluči migracija
+   na `MCPServer` API iz 2.x, treba ažurirati `synapserag/connectors/mcp_server.py` i onda skinuti pin u `pyproject.toml`.
+4. Razmotriti dodavanje `CHANGELOG.md` i verzionisanje releasa kad paket dobije prve eksterne korisnike.
