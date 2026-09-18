@@ -45,6 +45,13 @@ class SynapseConfig:
     # Embedding Dimension (Default 384 for MiniLM/ColBERT, configurable)
     embedding_dim: int = 384
 
+    # Embedding backend: "auto" tries sentence-transformers and falls back to the
+    # zero-dependency deterministic hash embedder if the library/model is unavailable.
+    # "hash" forces the deterministic fallback. "sentence-transformers" forces the
+    # neural backend and raises if it cannot be loaded.
+    embedding_backend: str = "auto"
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+
     def get_storage_path(self) -> Path:
         p = Path(self.storage_dir)
         p.mkdir(parents=True, exist_ok=True)

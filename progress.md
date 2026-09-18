@@ -76,10 +76,17 @@
 
 ### Faza 8: Testovi i Ojačavanje (Novo — sledeća faza)
 - [x] Osnovni test paket (`tests/test_engine.py`, `tests/test_storage.py`) — 6/6 testova prolazi.
-- [ ] Zamena `MultiModalEmbedder` hash-baziranog placeholder embeddinga pravim modelom (npr. sentence-transformers/ColBERT).
+- [x] Prvi commit svih fajlova u Git i push na GitHub remote (`arhistrategstudio/synapserag`, commit `f515aa8`).
+- [x] **Pravi embedding model (`synapserag/ingest/neural_backend.py`)**:
+  - `SentenceTransformerBackend` — lenjo učitava `sentence-transformers/all-MiniLM-L6-v2` (384-dim, već keširan lokalno u
+    `~/.cache/huggingface`), daje pooled dense embedding i per-token embedding (iz `last_hidden_state`) za ColBERT MaxSim.
+  - Proces-wide model cache (`_MODEL_CACHE`) da se težine ne učitavaju ponovo za svaku instancu `SynapseEngine`-a.
+  - `SynapseEngine._build_embedder()` automatski koristi ovaj backend kada je dostupan (`config.embedding_backend="auto"`,
+    default), uz čist fallback na hash-based `MultiModalEmbedder` kad biblioteka/model nisu dostupni — zero-dependency
+    garancija ostaje netaknuta. Nova config polja: `embedding_backend`, `embedding_model_name`.
+  - Testovi (6/6) prolaze sa pravim embeddingom (~47s zbog učitavanja modela pri prvom pozivu, keširano nakon toga).
 - [ ] Perzistencija/reload test (upis na disk pa ponovno učitavanje engine-a iz `storage_dir`).
-- [ ] Testovi za pojedinačne connectore (`openai_agent`, `gemini_agent`, `mcp_server`, itd.).
-- [ ] Prvi commit svih fajlova u Git i push na GitHub remote.
+- [ ] Testovi za pojedinačne connectore (`openai_agent`, `gemini_agent`, `mcp_server`, itd.) — edge case-ovi (nevalidan input, prazan upit).
 
 ---
 

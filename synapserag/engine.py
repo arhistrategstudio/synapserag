@@ -14,6 +14,7 @@ from .storage.vector_store import EmbeddedVectorStore
 from .storage.graph_store import EmbeddedGraphStore
 from .storage.sparse_store import EmbeddedSparseStore
 from .ingest.embedder import MultiModalEmbedder
+from .ingest.neural_backend import SentenceTransformerBackend
 from .ingest.chunker import ContextualLateChunker
 from .ingest.graph_extractor import FastGraphExtractor
 from .retrieval.engine import TriBrainRetriever
@@ -38,7 +39,8 @@ class SynapseEngine:
         self.sparse_store = EmbeddedSparseStore(storage_dir=storage_path)
 
         # Ingestion layer
-        self.embedder = MultiModalEmbedder(dim=self.config.embedding_dim)
+        self.embedding_backend: Optional[SentenceTransformerBackend] = None
+        self.embedder = self._build_embedder()
         self.chunker = ContextualLateChunker()
         self.graph_extractor = FastGraphExtractor(graph_store=self.graph_store)
 
@@ -56,6 +58,32 @@ class SynapseEngine:
         self.citation_engine = CitationEngine()
         self.circuit_breaker = HallucinationCircuitBreaker(
             min_confidence_threshold=self.config.min_confidence_threshold
+        )
+
+    def _build_embedder(self) -> MultiModalEmbedder:
+        """
+        Wires in the real sentence-transformers neural backend when available/requested,
+        otherwise falls back to the zero-dependency deterministic hash embedder.
+        """
+        dense_fn = None
+        tokens_fn = None
+
+        if self.config.embedding_backend in ("auto", "sentence-transformers"):
+            backend = SentenceTransformerBackend(model_name=self.config.embedding_model_name)
+            if backend.is_available:
+                self.embedding_backend = backend
+                dense_fn = backend.embed_text
+                tokens_fn = backend.embed_tokens
+            elif self.config.embedding_backend == "sentence-transformers":
+                raise RuntimeError(
+                    f"embedding_backend='sentence-transformers' requested but could not load "
+                    f"model '{self.config.embedding_model_name}': {backend._load_error}"
+                )
+
+        return MultiModalEmbedder(
+            dim=self.config.embedding_dim,
+            external_dense_fn=dense_fn,
+            external_tokens_fn=tokens_fn
         )
 
     def ingest_text(
