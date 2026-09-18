@@ -145,13 +145,18 @@
     objavljuje na PyPI preko [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC, `id-token: write`) —
     bez čuvanja dugotrajnog API tokena kao GitHub secret-a.
   - `CHANGELOG.md` dodat (Keep a Changelog format), sa `0.1.0` unosom koji sumira sve što je do sada implementirano.
-  - README ažuriran: nova sekcija "Releasing (maintainers)" sa tačnim koracima za cutting a release i jednokratnim
-    manuelnim korakom koji mora uraditi vlasnik PyPI naloga (podešavanje trusted publisher-a na pypi.org — ovo CI ne
-    može sam da bootstrap-uje, zahteva ljudski nalog).
-  - **Preostalo da uradi vlasnik projekta (nije nešto što agent može uraditi umesto njega):**
-    1. Na pypi.org, podesiti trusted publisher za `arhistrategstudio/synapserag`, workflow `publish.yml`, environment `pypi`
-       (radi i kao "pending publisher" pre nego što projekat i postoji na PyPI-u).
-    2. `git tag v0.1.0 && git push origin v0.1.0` da se okine prvi release.
+  - README ažuriran: nova sekcija "Releasing (maintainers)" sa tačnim koracima za cutting a release.
+- [x] **Prvi PyPI release objavljen (2026-09-18)**:
+  - Vlasnik je uključio 2FA na PyPI nalogu (preduslov koji PyPI zahteva za Trusted Publisher podešavanje).
+  - Pending trusted publisher registrovan na pypi.org (`arhistrategstudio/synapserag`, workflow `publish.yml`,
+    environment `pypi`) preko browser automation (Claude in Chrome) — agent je popunio i submitovao formu.
+  - Tag `v0.1.0` push-ovan → `.github/workflows/publish.yml` se okinuo, build + publish job-ovi su prošli (zeleno),
+    paket je potvrđen na PyPI JSON API-ju (`synapserag 0.1.0`, `synapserag-0.1.0-py3-none-any.whl`).
+  - `pip install synapserag` sada radi bez kloniranja repoa. README ažuriran (install sekcija koristi `pip install
+    synapserag` umesto `git clone` + `pip install -e .`, dodat PyPI verzija badge).
+  - **Napomena o bezbednosti:** tokom 2FA setup-a, PyPI recovery-codes fajl je preuzet direktno u root ovog git
+    repoa (`PyPI-Recovery-Codes-*.txt`). Agent ga NIJE komitovao/pushovao, i upozorio je korisnika da ga premesti
+    izvan repoa (npr. u password manager) čim pre — osetljiv fajl, ne pripada verzionisanom kodu.
 
 ---
 
@@ -172,10 +177,8 @@
 ---
 
 ## ⏭️ Šta je sledeće (Next Immediate Steps — Faza 10 ideje)
-1. ~~Objaviti na PyPI~~ — **infrastruktura urađena** (build verifikovan, `LICENSE`, `publish.yml` sa Trusted Publishing,
-   `CHANGELOG.md`, README uputstvo). Ostaje samo jednokratni manuelni korak vlasnika PyPI naloga (trusted publisher
-   setup) + push taga `v0.1.0` — vidi detalje u Fazi 10 iznad. Agent ne može uraditi ovaj korak (zahteva pristup
-   PyPI nalogu vlasnika).
+1. ~~Objaviti na PyPI~~ — **urađeno** (`pip install synapserag` radi, verzija 0.1.0 live na PyPI-u od 2026-09-18).
+   Vidi detalje u Fazi 10 iznad.
 2. ~~Poboljšati circuit breaker confidence metriku da bude robusnija na malim korpusima~~ — **urađeno** (sekundarni
    apsolutni gejt na dense cosine sličnost, vidi Fazu 10 iznad). Moguć budući rad: kalibrisati/dokumentovati ponašanje
    i za `graph_score`/`sparse_score` kanale (trenutno gejt koristi samo `dense_score`, jer je jedini kanal sa

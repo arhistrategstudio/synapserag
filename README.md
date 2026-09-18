@@ -1,6 +1,7 @@
 # 🧠 SynapseRAG — Next-Gen Embeddable Tri-Brain RAG Engine
 
 [![Tests](https://github.com/arhistrategstudio/synapserag/actions/workflows/tests.yml/badge.svg)](https://github.com/arhistrategstudio/synapserag/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/synapserag.svg)](https://pypi.org/project/synapserag/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Native-green.svg)](https://modelcontextprotocol.io/)
@@ -84,26 +85,22 @@ the Python standard library. Optional extras add a real neural embedding backend
 and the native MCP server.
 
 ```bash
-git clone https://github.com/arhistrategstudio/synapserag.git
-cd synapserag
-
 # Core only (hash-based embeddings, zero dependencies)
-pip install -e .
+pip install synapserag
 
 # With real embeddings (sentence-transformers/all-MiniLM-L6-v2 + ColBERT-style
 # per-token vectors)
-pip install -e ".[sentence-transformers,torch]"
+pip install "synapserag[sentence-transformers,torch]"
 
 # With the native MCP server
-pip install -e ".[mcp]"
+pip install "synapserag[mcp]"
 
 # Everything (embeddings + MCP + test tooling)
-pip install -e ".[all,dev]"
+pip install "synapserag[all,dev]"
 ```
 
-Not yet published on PyPI — install from a local clone as shown above. Once the
-first release is published, the above will also work as `pip install synapserag`
-(add extras as `pip install "synapserag[mcp]"`, etc.).
+Or install from a local clone for development (`pip install -e .` instead of
+`pip install synapserag`, same extras).
 
 ---
 
