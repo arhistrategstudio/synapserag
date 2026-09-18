@@ -2,8 +2,8 @@
 
 ## 📌 Status Projekta
 - **Datum pokretanja:** 2026-09-18
-- **Trenutna faza:** Faza 7 završena (svi moduli implementirani), sledi hardening i realni embedding model
-- **Status:** 🟢 Core implementiran, testovi prolaze (6/6)
+- **Trenutna faza:** Faza 8 završena (realni embedding, persistencija, connector testovi) — sledi Faza 9 (packaging/CI)
+- **Status:** 🟢 Core implementiran i ojačan, testovi prolaze (15/15)
 
 ---
 
@@ -91,7 +91,13 @@
   - `test_engine_no_persist_on_write_requires_explicit_persist` — potvrđuje ponašanje `persist_on_write=False`
     (podaci nisu na disku dok se eksplicitno ne pozove `engine.persist()`).
   - Testovi koriste `embedding_backend="hash"` da ostanu brzi i nezavisni od neuronskog modela.
-- [ ] Testovi za pojedinačne connectore (`openai_agent`, `gemini_agent`, `mcp_server`, itd.) — edge case-ovi (nevalidan input, prazan upit).
+- [x] **Testovi za pojedinačne konektore (`tests/test_connectors.py`)** — 7 novih edge-case testova:
+  - OpenAI/Gemini konektori bacaju `ValueError` na nepoznat naziv alata; OpenAI konektor ispravno parsira JSON-string argumente.
+  - DeepSeek konektor se ne ruši kad nema rezultata pretrage (prazan engine) — vraća string sa `WARNING` blokom umesto exception-a.
+  - Ollama konektor ne puca na malformiran `tool_call` (nedostaje `function` ključ).
+  - CloudCode konektor vraća `status: "error"` za nepoznatu akciju i prazne `references` za nepostojeći simbol, umesto da baci grešku.
+  - **Poznato ograničenje (nije bag, zabeleženo za budući rad):** na malom korpusu (1 dokument) RRF-normalizovani confidence skor može biti visok i za semantički nepovezan upit, jer meri relativni rank-konsenzus kroz kanale a ne apsolutnu semantičku sličnost. Circuit breaker je pouzdaniji na većim, realnijim korpusima.
+- Ukupno testova: **15/15 prolazi** (`tests/test_engine.py`, `tests/test_storage.py`, `tests/test_persistence.py`, `tests/test_connectors.py`).
 
 ---
 
@@ -105,8 +111,10 @@
 
 ---
 
-## ⏭️ Šta je sledeće (Next Immediate Steps)
-1. Komitovati trenutno stanje (`synapserag/`, `tests/`, ažurirani `progress.md`) i push-ovati na GitHub remote.
-2. Zameniti `MultiModalEmbedder`-ov hash-based placeholder embedding pravim modelom (sentence-transformers ili sličan lokalni model) radi realne semantičke pretrage.
-3. Dodati test za perzistenciju/reload (upis na disk pa učitavanje novog `SynapseEngine` instance iz istog `storage_dir`).
-4. Dodati testove za konektore (`openai_agent`, `gemini_agent`, `deepseek_agent`, `ollama_agent`, `mcp_server`, `cloudcode`).
+## ⏭️ Šta je sledeće (Next Immediate Steps — Faza 9: Packaging & CI)
+1. Dodati `pyproject.toml` (ili `setup.py`) da `synapserag` bude pip-instalabilan paket, sa jasno odvojenim core (zero-dep)
+   i optional extras (`sentence-transformers`, `torch`, `mcp`) zavisnostima.
+2. Dodati GitHub Actions workflow (`.github/workflows/tests.yml`) koji pokreće `pytest tests/` na svaki push/PR.
+3. Razmotriti poboljšanje circuit breaker confidence metrike da bude robusnija na malim korpusima (trenutno RRF-normalizovan
+   skor meri relativni rank-konsenzus kroz kanale, ne apsolutnu semantičku sličnost — vidi napomenu u Faza 8).
+4. Pregledati i ažurirati `README.md` da odražava trenutno stanje implementacije (svi moduli + realni embedding backend).
