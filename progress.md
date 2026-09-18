@@ -138,6 +138,20 @@
     `pip install -e ".[sentence-transformers]"`.
   - Ukupno testova: **16/16 prolazi lokalno** (15 postojećih + 1 novi; CI i dalje vidi 15/16 jer 1 test preskače).
   - README.md ažuriran (sekcija Testing & Status) sa objašnjenjem novog gejta i njegove kalibracije po backend-u.
+- [x] **Infrastruktura za PyPI objavljivanje (2026-09-18)**:
+  - `LICENSE` (MIT, nedostajao je iako je `pyproject.toml` deklarisao `license = "MIT"`) — potrebno za PyPI/quality checks.
+  - Verifikovano lokalno: `python -m build` pravi ispravan sdist + wheel (`synapserag-0.1.0`), `twine check dist/*` → PASSED za oba.
+  - **`.github/workflows/publish.yml`**: novi GitHub Actions workflow, okida se na push taga `v*`, build-uje distribuciju i
+    objavljuje na PyPI preko [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC, `id-token: write`) —
+    bez čuvanja dugotrajnog API tokena kao GitHub secret-a.
+  - `CHANGELOG.md` dodat (Keep a Changelog format), sa `0.1.0` unosom koji sumira sve što je do sada implementirano.
+  - README ažuriran: nova sekcija "Releasing (maintainers)" sa tačnim koracima za cutting a release i jednokratnim
+    manuelnim korakom koji mora uraditi vlasnik PyPI naloga (podešavanje trusted publisher-a na pypi.org — ovo CI ne
+    može sam da bootstrap-uje, zahteva ljudski nalog).
+  - **Preostalo da uradi vlasnik projekta (nije nešto što agent može uraditi umesto njega):**
+    1. Na pypi.org, podesiti trusted publisher za `arhistrategstudio/synapserag`, workflow `publish.yml`, environment `pypi`
+       (radi i kao "pending publisher" pre nego što projekat i postoji na PyPI-u).
+    2. `git tag v0.1.0 && git push origin v0.1.0` da se okine prvi release.
 
 ---
 
@@ -158,11 +172,15 @@
 ---
 
 ## ⏭️ Šta je sledeće (Next Immediate Steps — Faza 10 ideje)
-1. **Objaviti na PyPI** (opciono) ako se želi `pip install synapserag` bez kloniranja repoa — trenutno instalacija je samo iz lokalnog kloniranog repoa.
+1. ~~Objaviti na PyPI~~ — **infrastruktura urađena** (build verifikovan, `LICENSE`, `publish.yml` sa Trusted Publishing,
+   `CHANGELOG.md`, README uputstvo). Ostaje samo jednokratni manuelni korak vlasnika PyPI naloga (trusted publisher
+   setup) + push taga `v0.1.0` — vidi detalje u Fazi 10 iznad. Agent ne može uraditi ovaj korak (zahteva pristup
+   PyPI nalogu vlasnika).
 2. ~~Poboljšati circuit breaker confidence metriku da bude robusnija na malim korpusima~~ — **urađeno** (sekundarni
    apsolutni gejt na dense cosine sličnost, vidi Fazu 10 iznad). Moguć budući rad: kalibrisati/dokumentovati ponašanje
    i za `graph_score`/`sparse_score` kanale (trenutno gejt koristi samo `dense_score`, jer je jedini kanal sa
    dobro definisanom apsolutnom skalom u [0,1]; BM25 je neograničen, a PPR aktivaciona masa zavisi od veličine grafa).
 3. **Pratiti `mcp` SDK 2.x migraciju** — trenutno pinovano na `<2.0.0` da radi sa `FastMCP`; kad/ako se odluči migracija
    na `MCPServer` API iz 2.x, treba ažurirati `synapserag/connectors/mcp_server.py` i onda skinuti pin u `pyproject.toml`.
-4. Razmotriti dodavanje `CHANGELOG.md` i verzionisanje releasa kad paket dobije prve eksterne korisnike.
+4. ~~Razmotriti dodavanje `CHANGELOG.md` i verzionisanje releasa~~ — **urađeno** (`CHANGELOG.md` dodat, Keep a Changelog
+   format, `0.1.0` unos; verzionisanje releasa je sada vezano za `pyproject.toml` verziju + git tag preko `publish.yml`).

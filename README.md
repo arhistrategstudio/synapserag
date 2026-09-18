@@ -101,7 +101,28 @@ pip install -e ".[mcp]"
 pip install -e ".[all,dev]"
 ```
 
-Not yet published on PyPI — install from a local clone as shown above.
+Not yet published on PyPI — install from a local clone as shown above. Once the
+first release is published, the above will also work as `pip install synapserag`
+(add extras as `pip install "synapserag[mcp]"`, etc.).
+
+---
+
+## 📤 Releasing (maintainers)
+
+Releases are built and published to PyPI by `.github/workflows/publish.yml` using
+[PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC —
+no long-lived API tokens stored in the repo). To cut a release:
+
+1. Bump `version` in `pyproject.toml` and add an entry to `CHANGELOG.md`, commit to `main`.
+2. Tag the commit `vX.Y.Z` and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. The workflow builds the sdist/wheel and publishes them to PyPI automatically.
+
+**One-time setup (before the first release):** on [pypi.org](https://pypi.org),
+under the project's *Publishing* settings (or via *pending publisher* if the
+project doesn't exist on PyPI yet), add a trusted publisher for this repo:
+owner `arhistrategstudio`, repository `synapserag`, workflow `publish.yml`,
+environment `pypi`. This must be done once by whoever owns the PyPI account —
+it's not something CI can bootstrap itself.
 
 ---
 
