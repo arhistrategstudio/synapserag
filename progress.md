@@ -2,8 +2,8 @@
 
 ## 📌 Status Projekta
 - **Datum pokretanja:** 2026-09-18
-- **Trenutna faza:** Faza 9 završena (packaging, CI, README) — projekat je pip-instalabilan i ima zeleni CI
-- **Status:** 🟢 Core implementiran i ojačan, testovi prolaze (15/15), CI zeleno na GitHub Actions (Python 3.10-3.13)
+- **Trenutna faza:** Faza 10 u toku (ojačavanje circuit breaker-a na malim korpusima)
+- **Status:** 🟢 Core implementiran i ojačan, testovi prolaze (16/16), CI zeleno na GitHub Actions (Python 3.10-3.13)
 
 ---
 
@@ -115,25 +115,54 @@
   Testing & Status sa poznatim ograničenjem circuit breaker-a na malim korpusima.
 - Sav kod je već bio komitovan i pushovan pre ove faze (prethodna napomena o untracked fajlovima u ovom progress.md je bila zastarela — `git status` na početku Faze 9 je bio clean).
 
+### Faza 10: Ojačavanje Circuit Breaker-a na Malim Korpusima (U toku, 2026-09-18)
+- [x] **Sekundarni, apsolutni gejt na sirovu dense cosine sličnost (`synapserag/verify/circuit_breaker.py`)**:
+  - Rešava poznato ograničenje iz Faze 8/9: RRF-normalizovani fused skor meri relativni rank-konsenzus kroz tri
+    kanala, ne apsolutnu semantičku sličnost. Na malom korpusu (npr. jedan dokument) nepovezan upit i dalje trivijalno
+    rangira jedini postojeći chunk na #1 mesto u dense kanalu (dok sparse/graph ne nađu ništa), pa je fused skor mogao
+    proći prag pouzdanosti iako match nije stvarno relevantan.
+  - `HallucinationCircuitBreaker.evaluate()` sada, pored postojeće provere `min_confidence_threshold` na fused skoru,
+    dodatno proverava sirov `dense_score` (cosine sličnost) top match-a protiv novog `min_semantic_similarity` praga
+    — ali samo kad je `channel == "hybrid"` i `dense_score != 0.0` (tj. dense kanal je stvarno učestvovao).
+  - Novo config polje: `SynapseConfig.min_semantic_similarity` (default `0.22`), povezano kroz `SynapseEngine.__init__`.
+  - **Kalibracija (izmereno lokalno, ne pretpostavljeno):** za `all-MiniLM-L6-v2` nepovezani parovi rečenica daju
+    dense_score ~0.15-0.16, dok stvarno relevantni upiti daju ~0.72-0.75 — jasna margina oko praga 0.22. Za
+    zero-dependency hash embedder (fallback), nepovezani tekstovi daju ~0.37 (viši šum jer je to prosek nezavisnih
+    hash-projektovanih vektora kratkih tekstova bez naučene semantike), dok relevantni upiti i dalje daju ~0.82 —
+    gejt i dalje radi, ali sa manjom marginom.
+  - Novi regresioni test (`tests/test_connectors.py::test_circuit_breaker_catches_small_corpus_false_consensus`):
+    jedan dokument o pekarskom inventaru, upit o termodinamici crnih rupa (nula preklapanja u temi) sada ispravno
+    aktivira circuit breaker; kontrolni upit o zalihama brašna/šećera na istom korpusu ispravno NE aktivira breaker.
+    Test koristi `pytest.importorskip("sentence_transformers")` i preskače se u CI (koji namerno ne instalira
+    `sentence-transformers`/`torch` da bi testirao hash fallback putanju) — pokreće se lokalno ili sa
+    `pip install -e ".[sentence-transformers]"`.
+  - Ukupno testova: **16/16 prolazi lokalno** (15 postojećih + 1 novi; CI i dalje vidi 15/16 jer 1 test preskače).
+  - README.md ažuriran (sekcija Testing & Status) sa objašnjenjem novog gejta i njegove kalibracije po backend-u.
+
 ---
 
 ## 📍 Gde smo stali (Current Milestone)
 - Kompletna arhitektura implementirana kroz sve module: storage (vector/graph/sparse), ingest (chunker/embedder/graph_extractor),
   retrieval (PPR, fusion, tri-brain engine), query (clue engine, router), verify (citations, circuit breaker) i svih 6 konektora.
-- Lokalni test paket (`pytest tests/`) prolazi 15/15, i CI (GitHub Actions) je zeleno na Python 3.10-3.13.
+- Lokalni test paket (`pytest tests/`) prolazi 16/16 (CI vidi 15/16 — 1 test se namerno preskače bez `sentence-transformers`),
+  i CI (GitHub Actions) je zeleno na Python 3.10-3.13.
 - Projekat je pip-instalabilan (`pyproject.toml`) sa zero-dep core i optional extras.
 - Otkriven i ispravljen bug (Faza 4): circuit breaker je poredio ne-normalizovani RRF fuzioni skor (max ~0.016) sa apsolutnim
   pragom pouzdanosti od 0.25, zbog čega je gotovo uvek okidao. Fuzioni skor je sada normalizovan u `[0, 1]` u `retrieval/fusion.py`.
 - Otkriven i ispravljen bug (Faza 9): `mcp` extra bez gornje granice verzije povlači mcp 2.x koji je preimenovao
   `FastMCP` → `MCPServer`, čime bi `create_mcp_server()` tiho prestao da radi. Pinovano na `mcp>=1.0.0,<2.0.0`.
+- Faza 10 (u toku): circuit breaker sada ima sekundarni gejt na sirovu dense cosine sličnost (`min_semantic_similarity`,
+  default 0.22) da uhvati slučaj lažnog rank-konsenzusa na malom korpusu — vidi detalje iznad.
 - Sve promene su komitovane i pushovane na `origin/main` (`arhistrategstudio/synapserag`) nakon svakog završenog koraka.
 
 ---
 
 ## ⏭️ Šta je sledeće (Next Immediate Steps — Faza 10 ideje)
 1. **Objaviti na PyPI** (opciono) ako se želi `pip install synapserag` bez kloniranja repoa — trenutno instalacija je samo iz lokalnog kloniranog repoa.
-2. **Poboljšati circuit breaker confidence metriku** da bude robusnija na malim korpusima (trenutno RRF-normalizovan
-   skor meri relativni rank-konsenzus kroz kanale, ne apsolutnu semantičku sličnost — vidi napomenu u Faza 8/README).
+2. ~~Poboljšati circuit breaker confidence metriku da bude robusnija na malim korpusima~~ — **urađeno** (sekundarni
+   apsolutni gejt na dense cosine sličnost, vidi Fazu 10 iznad). Moguć budući rad: kalibrisati/dokumentovati ponašanje
+   i za `graph_score`/`sparse_score` kanale (trenutno gejt koristi samo `dense_score`, jer je jedini kanal sa
+   dobro definisanom apsolutnom skalom u [0,1]; BM25 je neograničen, a PPR aktivaciona masa zavisi od veličine grafa).
 3. **Pratiti `mcp` SDK 2.x migraciju** — trenutno pinovano na `<2.0.0` da radi sa `FastMCP`; kad/ako se odluči migracija
    na `MCPServer` API iz 2.x, treba ažurirati `synapserag/connectors/mcp_server.py` i onda skinuti pin u `pyproject.toml`.
 4. Razmotriti dodavanje `CHANGELOG.md` i verzionisanje releasa kad paket dobije prve eksterne korisnike.

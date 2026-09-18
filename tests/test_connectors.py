@@ -84,3 +84,40 @@ def test_cloudcode_connector_find_symbol_definition_not_found():
         })
         assert res["status"] == "success"
         assert res["references"] == []
+
+
+def test_circuit_breaker_catches_small_corpus_false_consensus():
+    # Regression test for the known limitation documented in progress.md (Faza 8/9):
+    # on a single-document corpus, RRF rank-consensus alone can score a
+    # semantically unrelated top match near-perfectly, because it trivially
+    # ranks #1 in the only channel that returns anything (dense), while sparse
+    # and graph find no keyword overlap and contribute nothing. The circuit
+    # breaker must now also gate on the raw dense cosine similarity to catch
+    # this case instead of trusting rank-consensus alone.
+    #
+    # Uses the real sentence-transformers backend (not the "hash" fallback used
+    # by the other tests in this file): the zero-dependency hash embedder's
+    # cosine similarity has a much noisier baseline for short texts (~0.35-0.4
+    # even for unrelated content, vs ~0.15-0.2 for MiniLM), so this specific
+    # gate is only deterministically testable against real embeddings. Skipped
+    # in CI, which intentionally installs without sentence-transformers/torch
+    # to exercise the zero-dependency hash-embedding path instead (see README).
+    pytest.importorskip("sentence_transformers")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        engine = SynapseEngine(config=SynapseConfig(storage_dir=tmpdir))
+        engine.ingest_text(
+            text="Quarterly bakery inventory report: flour, sugar, and yeast stock levels for the north branch.",
+            uri="docs/bakery.md"
+        )
+        result = engine.query(
+            "Explain the thermodynamic entropy equations governing black hole event horizons.",
+            mode="hybrid",
+            top_k=3
+        )
+        assert result.circuit_breaker_triggered
+        assert "semantic similarity" in result.warning
+
+        # Sanity check: a genuinely relevant query against the same tiny corpus
+        # must NOT be caught by the new gate.
+        related = engine.query("What are the flour and sugar stock levels?", mode="hybrid", top_k=3)
+        assert not related.circuit_breaker_triggered

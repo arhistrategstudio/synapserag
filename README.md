@@ -190,22 +190,33 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-15/15 tests currently pass, covering the storage engines, the full ingest →
+16/16 tests currently pass, covering the storage engines, the full ingest →
 retrieve → verify pipeline, disk persistence/reload, and per-connector
 edge cases (malformed tool calls, empty corpora, unknown tool/action names).
 CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on every
 push/PR to `main` across Python 3.10–3.13, installing the `dev` and `mcp`
 extras (the MCP connector test needs the `mcp` package) but leaving out
 `sentence-transformers`/`torch`, so it also exercises the zero-dependency
-hash-embedding fallback path.
+hash-embedding fallback path. One test
+(`test_circuit_breaker_catches_small_corpus_false_consensus`) requires the
+real `sentence-transformers` backend and is skipped in CI for that reason —
+run `pip install -e ".[sentence-transformers]"` locally to include it.
 
-**Known limitation:** on a very small corpus (e.g. a single ingested
-document), the RRF-normalized confidence score used by the hallucination
-circuit breaker can register as high-confidence even for a semantically
-unrelated query, since it measures relative rank-consensus across the three
-retrieval channels rather than absolute semantic similarity. This is more
-reliable on larger, realistic corpora; improving small-corpus robustness is
-tracked as future work.
+**Small-corpus circuit breaker gate:** on a very small corpus (e.g. a single
+ingested document), the RRF-normalized confidence score used by the
+hallucination circuit breaker can register as high-confidence even for a
+semantically unrelated query, since it measures relative rank-consensus
+across the three retrieval channels rather than absolute semantic similarity
+— a single unrelated chunk can trivially rank #1 in the only channel that
+returns anything. `HallucinationCircuitBreaker` now cross-checks the raw
+dense cosine similarity of the top match against a second, absolute
+threshold (`SynapseConfig.min_semantic_similarity`, default `0.22`,
+calibrated against `all-MiniLM-L6-v2`'s ~0.15-0.2 noise floor for unrelated
+sentence pairs vs ~0.5+ for real matches) and trips the breaker if it falls
+short, whenever the dense channel actually ran. This gate is weaker on the
+zero-dependency hash-embedding fallback, whose noise floor for short texts is
+higher (~0.35-0.4) and closer to genuine-match scores (~0.8) — it still adds
+protection there, just with a smaller margin.
 
 ---
 

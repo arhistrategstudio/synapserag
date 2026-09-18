@@ -57,7 +57,8 @@ class SynapseEngine:
         # Verification & Safety
         self.citation_engine = CitationEngine()
         self.circuit_breaker = HallucinationCircuitBreaker(
-            min_confidence_threshold=self.config.min_confidence_threshold
+            min_confidence_threshold=self.config.min_confidence_threshold,
+            min_semantic_similarity=self.config.min_semantic_similarity
         )
 
     def _build_embedder(self) -> MultiModalEmbedder:
