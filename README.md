@@ -1,5 +1,6 @@
 # 🧠 SynapseRAG — Next-Gen Embeddable Tri-Brain RAG Engine
 
+[![Tests](https://github.com/arhistrategstudio/synapserag/actions/workflows/tests.yml/badge.svg)](https://github.com/arhistrategstudio/synapserag/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Native-green.svg)](https://modelcontextprotocol.io/)
@@ -76,6 +77,34 @@ Unlike mainstream RAG frameworks (LangChain, LlamaIndex, isolated vector databas
 
 ---
 
+## 📥 Installation
+
+The core engine has **zero external runtime dependencies** — it's built entirely on
+the Python standard library. Optional extras add a real neural embedding backend
+and the native MCP server.
+
+```bash
+git clone https://github.com/arhistrategstudio/synapserag.git
+cd synapserag
+
+# Core only (hash-based embeddings, zero dependencies)
+pip install -e .
+
+# With real embeddings (sentence-transformers/all-MiniLM-L6-v2 + ColBERT-style
+# per-token vectors)
+pip install -e ".[sentence-transformers,torch]"
+
+# With the native MCP server
+pip install -e ".[mcp]"
+
+# Everything (embeddings + MCP + test tooling)
+pip install -e ".[all,dev]"
+```
+
+Not yet published on PyPI — install from a local clone as shown above.
+
+---
+
 ## 🛠️ Quick Start
 
 ```python
@@ -98,6 +127,21 @@ results = engine.query(
 for r in results.matches:
     print(f"[{r.score:.3f}] {r.file_path}:{r.line_number} -> {r.text_snippet}")
 ```
+
+By default, `SynapseConfig.embedding_backend="auto"` uses the real
+`sentence-transformers/all-MiniLM-L6-v2` model when the `sentence-transformers`
+and `torch` extras are installed, and transparently falls back to a
+zero-dependency hash-based embedder otherwise — the engine always works, with
+or without the extras. Set `embedding_backend="hash"` to force the fast
+dependency-free path (used by most of the test suite), or
+`embedding_backend="sentence-transformers"` to require the real model and fail
+loudly if it isn't available.
+
+All storage (vector, graph, sparse) is persisted to `storage_dir` on disk by
+default (`persist_on_write=True`); a fresh `SynapseEngine` pointed at the same
+`storage_dir` reloads all three indexes without re-ingesting. Set
+`persist_on_write=False` to keep everything in memory until you explicitly
+call `engine.persist()`.
 
 ---
 
@@ -136,6 +180,30 @@ gemini_tools = GeminiAgentConnector(engine).get_tools()
 deepseek_tools = DeepSeekAgentConnector(engine).get_tools()
 ollama_tools = OllamaAgentConnector(engine).get_tools()
 ```
+
+---
+
+## ✅ Testing & Status
+
+```bash
+pip install -e ".[dev]"
+pytest tests/ -v
+```
+
+15/15 tests currently pass, covering the storage engines, the full ingest →
+retrieve → verify pipeline, disk persistence/reload, and per-connector
+edge cases (malformed tool calls, empty corpora, unknown tool/action names).
+CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on every
+push/PR to `main` across Python 3.10–3.13, installing only the core + `dev`
+extra so it also exercises the zero-dependency hash-embedding fallback path.
+
+**Known limitation:** on a very small corpus (e.g. a single ingested
+document), the RRF-normalized confidence score used by the hallucination
+circuit breaker can register as high-confidence even for a semantically
+unrelated query, since it measures relative rank-consensus across the three
+retrieval channels rather than absolute semantic similarity. This is more
+reliable on larger, realistic corpora; improving small-corpus robustness is
+tracked as future work.
 
 ---
 
