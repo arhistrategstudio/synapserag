@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synapserag"
+version = "0.1.0"
+description = "SynapseRAG — an embeddable, zero-external-dependency Tri-Brain RAG engine (Dense/Late-Interaction + Neuro-Associative Graph + Sparse Lexical)."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Dusan Poposilov" },
+]
+keywords = ["rag", "retrieval-augmented-generation", "vector-search", "knowledge-graph", "mcp", "embeddings", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Indexing",
+]
+
+# Core package has zero external runtime dependencies — the tri-brain
+# storage/retrieval engine is built entirely on the Python standard library.
+dependencies = []
+
+[project.optional-dependencies]
+# Real neural embedding backend (SentenceTransformerBackend) instead of the
+# built-in zero-dependency hash-based embedder.
+sentence-transformers = ["sentence-transformers>=2.2.0"]
+# Required by sentence-transformers at runtime; split out so callers who
+# already manage their own torch install (e.g. GPU builds) aren't forced
+# onto the default CPU wheel.
+torch = ["torch>=2.0.0"]
+# Native Model Context Protocol server (synapserag.mcp) for Cursor, Claude
+# Desktop, Windsurf, etc.
+mcp = ["mcp>=1.0.0"]
+# Everything above, for a full-featured local install.
+all = ["sentence-transformers>=2.2.0", "torch>=2.0.0", "mcp>=1.0.0"]
+# Test/dev tooling.
+dev = ["pytest>=7.0.0"]
+
+[project.urls]
+Repository = "https://github.com/arhistrategstudio/synapserag"
+
+[tool.setuptools.packages.find]
+include = ["synapserag*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
