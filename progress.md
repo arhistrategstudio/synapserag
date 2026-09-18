@@ -2,8 +2,8 @@
 
 ## 📌 Status Projekta
 - **Datum pokretanja:** 2026-09-18
-- **Trenutna faza:** Faza 1 (Inicijalizacija arhitekture i skladišnog jezgra)
-- **Status:** 🟡 U izradi (In Progress)
+- **Trenutna faza:** Faza 7 završena (svi moduli implementirani), sledi hardening i realni embedding model
+- **Status:** 🟢 Core implementiran, testovi prolaze (6/6)
 
 ---
 
@@ -14,75 +14,87 @@
 - [x] Definisanje arhitektonskog plana i inovativnog SynapseRAG koncepta
 - [x] Inicijalizacija Git repozitorijuma i GitHub sinhronizacije
 - [x] Kreiranje `progress.md` i osnovne strukture projekta
-- [ ] Implementacija konfiguracionog sistema (`synapserag/config.py`)
-- [ ] Implementacija ugrađenih tipova podataka, modela i šema (`synapserag/types.py`)
+- [x] Implementacija konfiguracionog sistema (`synapserag/config.py`)
+- [x] Implementacija ugrađenih tipova podataka, modela i šema (`synapserag/types.py`)
 
 ### Faza 2: Skladišno Jezgro — Tri-Brain Storage Engine
-- [ ] **Dense & Tensor Store (`synapserag/storage/vector_store.py`)**:
+- [x] **Dense & Tensor Store (`synapserag/storage/vector_store.py`)**:
   - Podrška za guste vektore i ColBERT late-interaction tokene (MaxSim scoring).
   - Ugrađeno, samostalno skladište na disku (zero-external DB dependency).
-- [ ] **Neuro-Associative Graph (`synapserag/storage/graph_store.py`)**:
+- [x] **Neuro-Associative Graph (`synapserag/storage/graph_store.py`)**:
   - Inicijalizacija grafa relacija entiteta, predikata i izvornih tekstualnih segmenata.
   - Vektorski ponderisana matrica susedstva (Vector-Biased Adjacency Matrix).
-- [ ] **Sparse Lexical Index (`synapserag/storage/sparse_store.py`)**:
-  - Brzi BM25 / SPLADE invertovani indeks za egzaktno poklapanje koda, ID-jeva i termina.
+- [x] **Sparse Lexical Index (`synapserag/storage/sparse_store.py`)**:
+  - Brzi BM25 invertovani indeks za egzaktno poklapanje koda, ID-jeva i termina.
 
 ### Faza 3: Ingestion & Late-Chunking Pipeline
-- [ ] **Document Readers & Context Encoders (`synapserag/ingest/parser.py`)**:
-  - Učitavanje teksta, koda, Markdown-a, PDF-a.
-  - Generisanje globalnog situacionog konteksta po fajlu (Contextual Retrieval).
-- [ ] **Hierarchical Late-Chunker (`synapserag/ingest/chunker.py`)**:
+- [x] **Multi-Modal Embedder (`synapserag/ingest/embedder.py`)**:
+  - Generisanje gustih vektora i ColBERT token embeddings.
+- [x] **Hierarchical Late-Chunker (`synapserag/ingest/chunker.py`)**:
   - Očuvanje globalnog toka pažnje pre definisanja chunk granica.
   - Hijerarhijsko povezivanje roditelj-dete (Parent-Child chunking).
-- [ ] **Entity & Relation Extractor (`synapserag/ingest/graph_extractor.py`)**:
+- [x] **Entity & Relation Extractor (`synapserag/ingest/graph_extractor.py`)**:
   - Ekstrakcija ključnih entiteta i veza u letu bez blokiranja ingestion procesa.
 
 ### Faza 4: Pretraživanje i Fuzija (Retrieval Core)
-- [ ] **Vector-Biased Personalized PageRank (`synapserag/retrieval/ppr.py`)**:
+- [x] **Vector-Biased Personalized PageRank (`synapserag/retrieval/ppr.py`)**:
   - Algoritam matematičkog asocijativnog širenja kroz graf u jednom koraku.
-- [ ] **Late-Interaction MaxSim Matcher (`synapserag/retrieval/late_interaction.py`)**:
+- [x] **Late-Interaction MaxSim Matcher** (deo `storage/vector_store.py`):
   - Hirurško poređenje na nivou tokena.
-- [ ] **Dynamic Reciprocal Rank Fusion (`synapserag/retrieval/fusion.py`)**:
+- [x] **Dynamic Reciprocal Rank Fusion (`synapserag/retrieval/fusion.py`)**:
   - Inteligentno spajanje rezultata iz sva tri mozga (Dense + Graph + Sparse).
+  - **Ispravljen bug (2026-09-18):** RRF skor je bio neispravno poređen sa apsolutnim pragom pouzdanosti u circuit breaker-u — RRF vrednosti su ograničene na `1/(k+1) ≈ 0.016`, pa je circuit breaker okidao na svaki upit. Dodata normalizacija fuzionisanog skora u opseg `[0, 1]`.
+- [x] **Tri-Brain Retrieval Orchestrator (`synapserag/retrieval/engine.py`)**.
 
 ### Faza 5: Query Intelligence & Dual-System Clues
-- [ ] **System 1 Memo-Clue Generator (`synapserag/query/clue_engine.py`)**:
+- [x] **System 1 Memo-Clue Generator (`synapserag/query/clue_engine.py`)**:
   - Formiranje spekulativnih hipoteza za nejasne i visokonivojske upite.
-- [ ] **Adaptive Query Router (`synapserag/query/router.py`)**:
+- [x] **Adaptive Query Router (`synapserag/query/router.py`)**:
   - Rutiranje: da li je upit egzaktan, asocijativan, globalan ili multi-hop.
 
 ### Faza 6: Ugradivi Konektori za Sve Agente (Universal Integration)
-- [ ] **Native MCP Server (`synapserag/connectors/mcp_server.py`)**:
-  - JSON-RPC stdio/SSE server za Cursor, Claude Desktop, Windsurf.
-- [ ] **OpenAI Agents Connector (`synapserag/connectors/openai_agent.py`)**:
-  - Export alata i funkcija za OpenAI Assistants, Function Calling i Swarm.
-- [ ] **Gemini Agents Connector (`synapserag/connectors/gemini_agent.py`)**:
-  - Google GenAI Tool declarations za Gemini 1.5/2.0 i Vertex AI.
-- [ ] **DeepSeek Agents Connector (`synapserag/connectors/deepseek_agent.py`)**:
-  - Optimizovan tool calling format za DeepSeek-V3 i DeepSeek-R1.
-- [ ] **Ollama Agents Connector (`synapserag/connectors/ollama_agent.py`)**:
+- [x] **Native MCP Server (`synapserag/connectors/mcp_server.py`, `synapserag/mcp.py`)**:
+  - JSON-RPC stdio server za Cursor, Claude Desktop, Windsurf.
+- [x] **OpenAI Agents Connector (`synapserag/connectors/openai_agent.py`)**:
+  - Export alata i funkcija za OpenAI Assistants, Function Calling.
+- [x] **Gemini Agents Connector (`synapserag/connectors/gemini_agent.py`)**:
+  - Google GenAI Tool declarations za Gemini.
+- [x] **DeepSeek Agents Connector (`synapserag/connectors/deepseek_agent.py`)**:
+  - Optimizovan tool calling format za DeepSeek-V3/R1.
+- [x] **Ollama Agents Connector (`synapserag/connectors/ollama_agent.py`)**:
   - Povezivanje sa lokalnim modelima koji se izvršavaju preko Ollama.
-- [ ] **CloudCode & IDE Connector (`synapserag/connectors/cloudcode.py`)**:
+- [x] **CloudCode & IDE Connector (`synapserag/connectors/cloudcode.py`)**:
   - Integracija sa Google Cloud Code i razvojnim okruženjima.
-- [ ] **In-Process Python SDK (`synapserag/__init__.py`)**:
+- [x] **In-Process Python SDK (`synapserag/__init__.py`)**:
   - Direktan uvoz u bilo koji Python projekat u 1 liniji koda.
 
 ### Faza 7: Verifikacija, Determinističko Citiranje i Circuit Breaker
-- [ ] **Citation & Grounding Engine (`synapserag/verify/citations.py`)**:
+- [x] **Citation & Grounding Engine (`synapserag/verify/citations.py`)**:
   - Determinističko mapiranje izvora na nivou reda i karaktera (`file:line:char`).
-- [ ] **Hallucination Circuit Breaker (`synapserag/verify/circuit_breaker.py`)**:
-  - Detekcija nepokrivenih tvrdnji i aktiviranje fallback mehanizma.
+- [x] **Hallucination Circuit Breaker (`synapserag/verify/circuit_breaker.py`)**:
+  - Detekcija nepokrivenih tvrdnji i aktiviranje fallback mehanizma (sada radi nad normalizovanim skorom pouzdanosti).
+
+### Faza 8: Testovi i Ojačavanje (Novo — sledeća faza)
+- [x] Osnovni test paket (`tests/test_engine.py`, `tests/test_storage.py`) — 6/6 testova prolazi.
+- [ ] Zamena `MultiModalEmbedder` hash-baziranog placeholder embeddinga pravim modelom (npr. sentence-transformers/ColBERT).
+- [ ] Perzistencija/reload test (upis na disk pa ponovno učitavanje engine-a iz `storage_dir`).
+- [ ] Testovi za pojedinačne connectore (`openai_agent`, `gemini_agent`, `mcp_server`, itd.).
+- [ ] Prvi commit svih fajlova u Git i push na GitHub remote.
 
 ---
 
 ## 📍 Gde smo stali (Current Milestone)
-- Završena konceptualizacija, komparativno istraživanje i arhitektonski nacrt.
-- Pokrenuto postavljanje repozitorijuma, GitHub sinhronizacija i pisanje koda Faze 1 i Faze 2.
+- Kompletna arhitektura implementirana kroz sve module: storage (vector/graph/sparse), ingest (chunker/embedder/graph_extractor),
+  retrieval (PPR, fusion, tri-brain engine), query (clue engine, router), verify (citations, circuit breaker) i svih 6 konektora.
+- Lokalni test paket (`pytest tests/`) prolazi 6/6.
+- Otkriven i ispravljen bug: circuit breaker je poredio ne-normalizovani RRF fuzioni skor (max ~0.016) sa apsolutnim
+  pragom pouzdanosti od 0.25, zbog čega je gotovo uvek okidao. Fuzioni skor je sada normalizovan u `[0, 1]` u `retrieval/fusion.py`.
+- Kod još nije komitovan u Git (postoji lokalni repo + GitHub remote `origin` -> `arhistrategstudio/synapserag`, ali `synapserag/` i `tests/` su i dalje untracked).
 
 ---
 
 ## ⏭️ Šta je sledeće (Next Immediate Steps)
-1. Inicijalizacija lokalnog Git repozitorijuma i kreiranje GitHub remote repozitorijuma preko `gh repo create`.
-2. Kreiranje osnovne modularne strukture paketa `synapserag`.
-3. Implementacija `synapserag/types.py` i `synapserag/config.py`.
-4. Implementacija ugrađenog Tri-Brain skladišta (vektori, graf relacija, BM25 indeks) sa nula eksternih server zavisnosti.
+1. Komitovati trenutno stanje (`synapserag/`, `tests/`, ažurirani `progress.md`) i push-ovati na GitHub remote.
+2. Zameniti `MultiModalEmbedder`-ov hash-based placeholder embedding pravim modelom (sentence-transformers ili sličan lokalni model) radi realne semantičke pretrage.
+3. Dodati test za perzistenciju/reload (upis na disk pa učitavanje novog `SynapseEngine` instance iz istog `storage_dir`).
+4. Dodati testove za konektore (`openai_agent`, `gemini_agent`, `deepseek_agent`, `ollama_agent`, `mcp_server`, `cloudcode`).
