@@ -39,10 +39,11 @@ sentence-transformers = ["sentence-transformers>=2.2.0"]
 # onto the default CPU wheel.
 torch = ["torch>=2.0.0"]
 # Native Model Context Protocol server (synapserag.mcp) for Cursor, Claude
-# Desktop, Windsurf, etc.
-mcp = ["mcp>=1.0.0"]
+# Desktop, Windsurf, etc. Pinned below 2.0 because mcp_server.py targets the
+# mcp.server.fastmcp.FastMCP API as shipped in the 1.x series.
+mcp = ["mcp>=1.0.0,<2.0.0"]
 # Everything above, for a full-featured local install.
-all = ["sentence-transformers>=2.2.0", "torch>=2.0.0", "mcp>=1.0.0"]
+all = ["sentence-transformers>=2.2.0", "torch>=2.0.0", "mcp>=1.0.0,<2.0.0"]
 # Test/dev tooling.
 dev = ["pytest>=7.0.0"]
 
