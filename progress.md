@@ -85,7 +85,12 @@
     default), uz čist fallback na hash-based `MultiModalEmbedder` kad biblioteka/model nisu dostupni — zero-dependency
     garancija ostaje netaknuta. Nova config polja: `embedding_backend`, `embedding_model_name`.
   - Testovi (6/6) prolaze sa pravim embeddingom (~47s zbog učitavanja modela pri prvom pozivu, keširano nakon toga).
-- [ ] Perzistencija/reload test (upis na disk pa ponovno učitavanje engine-a iz `storage_dir`).
+- [x] **Perzistencija/reload test (`tests/test_persistence.py`)**:
+  - `test_engine_persist_and_reload_from_disk` — ingestuje dokument u jedan `SynapseEngine`, pravi potpuno nov engine
+    iz istog `storage_dir` bez ponovnog ingest-a, i potvrđuje da su vector/graph/sparse indeksi i dalje tu i da upit radi.
+  - `test_engine_no_persist_on_write_requires_explicit_persist` — potvrđuje ponašanje `persist_on_write=False`
+    (podaci nisu na disku dok se eksplicitno ne pozove `engine.persist()`).
+  - Testovi koriste `embedding_backend="hash"` da ostanu brzi i nezavisni od neuronskog modela.
 - [ ] Testovi za pojedinačne connectore (`openai_agent`, `gemini_agent`, `mcp_server`, itd.) — edge case-ovi (nevalidan input, prazan upit).
 
 ---
