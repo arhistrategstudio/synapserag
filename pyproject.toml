@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synapserag"
-version = "0.1.0"
+version = "0.2.0"
 description = "SynapseRAG — an embeddable, zero-external-dependency Tri-Brain RAG engine (Dense/Late-Interaction + Neuro-Associative Graph + Sparse Lexical)."
 readme = "README.md"
 license = { text = "MIT" }

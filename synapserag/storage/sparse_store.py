@@ -12,6 +12,8 @@ from pathlib import Path
 from collections import Counter, defaultdict
 
 from ..types import Chunk
+from ..text import word_tokens
+from . import sqlite_db
 
 
 class EmbeddedSparseStore:
@@ -30,6 +32,7 @@ class EmbeddedSparseStore:
         self.inverted_index: Dict[str, Dict[str, int]] = defaultdict(dict)
         self.avg_doc_len: float = 0.0
         self.num_docs: int = 0
+        self._dirty: Set[str] = set()
         
         if self.storage_dir:
             self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -37,13 +40,14 @@ class EmbeddedSparseStore:
 
     @staticmethod
     def tokenize(text: str) -> List[str]:
-        """Code-aware tokenizer splitting on punctuation, snake_case, and camelCase."""
+        """Code-aware, script-normalized tokenizer (snake_case, kebab-case, camelCase, Unicode words)."""
         if not text:
             return []
         # Split camelCase words (e.g., getUserProfile -> getUser Profile)
         text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
-        # Extract alphanumeric tokens and identifiers
-        raw_tokens = re.findall(r"[a-zA-Z0-9_\-]+", text.lower())
+        # Extract script-normalized word tokens and identifiers (Cyrillic -> Latin,
+        # diacritics stripped), so "крађа", "krađa" and "kradja" all index identically.
+        raw_tokens = word_tokens(text)
         tokens = []
         for t in raw_tokens:
             if len(t) > 1:
@@ -70,6 +74,7 @@ class EmbeddedSparseStore:
             
         self.num_docs = len(self.doc_lengths)
         self.avg_doc_len = sum(self.doc_lengths.values()) / max(1, self.num_docs)
+        self._dirty.add(cid)
 
     def search(self, query: str, top_k: int = 10) -> List[Tuple[str, float]]:
         """Compute BM25 scores for the given query against all indexed chunks."""
@@ -99,22 +104,45 @@ class EmbeddedSparseStore:
         return ranked[:top_k]
 
     def persist(self) -> None:
-        """Persist inverted index to disk."""
-        if not self.storage_dir:
+        """Write postings of chunks added since the last persist() to <storage_dir>/synapse.db."""
+        if not self.storage_dir or not self._dirty:
             return
-        data = {
-            "num_docs": self.num_docs,
-            "avg_doc_len": self.avg_doc_len,
-            "doc_lengths": self.doc_lengths,
-            "inverted_index": {t: dict(p) for t, p in self.inverted_index.items()}
-        }
-        with open(self.storage_dir / "sparse_store.json", "w", encoding="utf-8") as f:
-            json.dump(data, f)
+        docs = [(cid, self.doc_lengths[cid]) for cid in self._dirty if cid in self.doc_lengths]
+        postings = []
+        for cid in self._dirty:
+            for term, freq in Counter(self.doc_tokens.get(cid, [])).items():
+                postings.append((term, cid, freq))
+        con = sqlite_db.connect(self.storage_dir)
+        try:
+            with con:
+                con.executemany("INSERT OR REPLACE INTO sparse_docs VALUES (?,?)", docs)
+                con.executemany("INSERT OR REPLACE INTO sparse_postings VALUES (?,?,?)", postings)
+        finally:
+            con.close()
+        # Token lists are only needed until they are written.
+        for cid in self._dirty:
+            self.doc_tokens.pop(cid, None)
+        self._dirty.clear()
 
     def _load(self) -> None:
-        """Load inverted index from disk."""
+        """Load inverted index from synapse.db, or migrate a legacy sparse_store.json."""
         if not self.storage_dir:
             return
+        if sqlite_db.db_path(self.storage_dir).exists():
+            con = sqlite_db.connect(self.storage_dir)
+            try:
+                self.doc_lengths = dict(con.execute("SELECT chunk_id, length FROM sparse_docs"))
+                for term, cid, tf in con.execute("SELECT term, chunk_id, tf FROM sparse_postings"):
+                    self.inverted_index[term][cid] = tf
+            finally:
+                con.close()
+            if self.doc_lengths:
+                self.num_docs = len(self.doc_lengths)
+                self.avg_doc_len = sum(self.doc_lengths.values()) / max(1, self.num_docs)
+                return
+        self._load_legacy_json()
+
+    def _load_legacy_json(self) -> None:
         path = self.storage_dir / "sparse_store.json"
         if not path.exists():
             return
@@ -128,5 +156,10 @@ class EmbeddedSparseStore:
                 t: {cid: freq for cid, freq in p.items()}
                 for t, p in data.get("inverted_index", {}).items()
             })
+            # Rebuild per-chunk token lists so the next persist() migrates everything to SQLite.
+            for t, p in self.inverted_index.items():
+                for cid, freq in p.items():
+                    self.doc_tokens.setdefault(cid, []).extend([t] * freq)
+            self._dirty.update(self.doc_lengths.keys())
         except Exception:
             pass

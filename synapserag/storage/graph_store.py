@@ -11,6 +11,8 @@ from pathlib import Path
 from collections import defaultdict
 
 from ..types import GraphNode, GraphEdge
+from ..text import normalize_text
+from . import sqlite_db
 
 
 class EmbeddedGraphStore:
@@ -27,19 +29,27 @@ class EmbeddedGraphStore:
         self.name_to_node: Dict[str, str] = {}
         # Mapping from chunk_id to associated node_ids
         self.chunk_to_nodes: Dict[str, Set[str]] = defaultdict(set)
-        
+        # Incremental persistence bookkeeping
+        self._dirty_nodes: Set[str] = set()
+        self._new_edges: List[GraphEdge] = []
+        self._loading = False
+
         if self.storage_dir:
             self.storage_dir.mkdir(parents=True, exist_ok=True)
             self._load()
 
     def add_node(self, node: GraphNode) -> None:
         self.nodes[node.node_id] = node
-        self.name_to_node[node.name.lower().strip()] = node.node_id
+        self.name_to_node[normalize_text(node.name).strip()] = node.node_id
         for cid in node.associated_chunks:
             self.chunk_to_nodes[cid].add(node.node_id)
+        if not self._loading:
+            self._dirty_nodes.add(node.node_id)
 
     def add_edge(self, edge: GraphEdge) -> None:
         self.adjacency[edge.source_id].append(edge)
+        if not self._loading and not edge.relation.startswith("rev_"):
+            self._new_edges.append(edge)
         # Also add reciprocal back-edge for associative spreading
         reverse_edge = GraphEdge(
             source_id=edge.target_id,
@@ -52,12 +62,13 @@ class EmbeddedGraphStore:
 
     def link_entity_to_chunk(self, entity_name: str, chunk_id: str, node_type: str = "entity") -> str:
         """Create or update entity node and link it to the chunk."""
-        clean_name = entity_name.lower().strip()
+        clean_name = normalize_text(entity_name).strip()
         if clean_name in self.name_to_node:
             nid = self.name_to_node[clean_name]
             node = self.nodes[nid]
             if chunk_id not in node.associated_chunks:
                 node.associated_chunks.append(chunk_id)
+                self._dirty_nodes.add(nid)
             self.chunk_to_nodes[chunk_id].add(nid)
             return nid
         else:
@@ -75,7 +86,7 @@ class EmbeddedGraphStore:
         """Find nodes whose names match any of the given keywords."""
         matched_ids = []
         for kw in text_keywords:
-            clean = kw.lower().strip()
+            clean = normalize_text(kw).strip()
             if clean in self.name_to_node:
                 matched_ids.append(self.name_to_node[clean])
             else:
@@ -173,46 +184,59 @@ class EmbeddedGraphStore:
         return ranked
 
     def persist(self) -> None:
-        """Save graph structure to disk."""
-        if not self.storage_dir:
+        """Write nodes/edges changed since the last persist() to <storage_dir>/synapse.db."""
+        if not self.storage_dir or (not self._dirty_nodes and not self._new_edges):
             return
-        data = {
-            "nodes": [
-                {
-                    "node_id": n.node_id,
-                    "name": n.name,
-                    "node_type": n.node_type,
-                    "associated_chunks": n.associated_chunks,
-                    "metadata": n.metadata
-                }
-                for n in self.nodes.values()
-            ],
-            "edges": [
-                {
-                    "source_id": e.source_id,
-                    "target_id": e.target_id,
-                    "relation": e.relation,
-                    "weight": e.weight,
-                    "source_chunk_id": e.source_chunk_id
-                }
-                for edge_list in self.adjacency.values()
-                for e in edge_list
-                if not e.relation.startswith("rev_")
-            ]
-        }
-        with open(self.storage_dir / "graph_store.json", "w", encoding="utf-8") as f:
-            json.dump(data, f)
+        node_rows = []
+        for nid in self._dirty_nodes:
+            n = self.nodes.get(nid)
+            if n is None:
+                continue
+            node_rows.append((n.node_id, n.name, n.node_type,
+                              json.dumps(n.associated_chunks), json.dumps(n.metadata, ensure_ascii=False)))
+        edge_rows = [(e.source_id, e.target_id, e.relation, e.weight, e.source_chunk_id)
+                     for e in self._new_edges]
+        con = sqlite_db.connect(self.storage_dir)
+        try:
+            with con:
+                con.executemany("INSERT OR REPLACE INTO graph_nodes VALUES (?,?,?,?,?)", node_rows)
+                con.executemany("INSERT INTO graph_edges VALUES (?,?,?,?,?)", edge_rows)
+        finally:
+            con.close()
+        self._dirty_nodes.clear()
+        self._new_edges.clear()
 
     def _load(self) -> None:
-        """Load graph from disk."""
+        """Load graph from synapse.db, or migrate a legacy graph_store.json."""
         if not self.storage_dir:
             return
+        if sqlite_db.db_path(self.storage_dir).exists():
+            con = sqlite_db.connect(self.storage_dir)
+            self._loading = True
+            try:
+                for nid, name, ntype, chunks, meta in con.execute("SELECT * FROM graph_nodes"):
+                    self.add_node(GraphNode(node_id=nid, name=name, node_type=ntype,
+                                            associated_chunks=json.loads(chunks or "[]"),
+                                            metadata=json.loads(meta or "{}")))
+                for src, dst, rel, w, scid in con.execute("SELECT * FROM graph_edges"):
+                    self.add_edge(GraphEdge(source_id=src, target_id=dst, relation=rel,
+                                            weight=w, source_chunk_id=scid))
+            finally:
+                self._loading = False
+                con.close()
+            if self.nodes:
+                return
+        self._load_legacy_json()
+
+    def _load_legacy_json(self) -> None:
         path = self.storage_dir / "graph_store.json"
         if not path.exists():
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # Not wrapped in _loading: everything is marked dirty so the next persist()
+            # migrates the legacy JSON graph into SQLite.
             for item in data.get("nodes", []):
                 self.add_node(GraphNode(
                     node_id=item["node_id"],

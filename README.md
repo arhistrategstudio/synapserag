@@ -88,8 +88,8 @@ and the native MCP server.
 # Core only (hash-based embeddings, zero dependencies)
 pip install synapserag
 
-# With real embeddings (sentence-transformers/all-MiniLM-L6-v2 + ColBERT-style
-# per-token vectors)
+# With real embeddings (sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+# + ColBERT-style per-token vectors)
 pip install "synapserag[sentence-transformers,torch]"
 
 # With the native MCP server
@@ -151,8 +151,8 @@ for match, citation in zip(results.matches, results.citations):
 A full runnable version of this — pointed at SynapseRAG's own source code — lives in
 [`examples/quickstart_demo.py`](examples/quickstart_demo.py).
 
-By default, `SynapseConfig.embedding_backend="auto"` uses the real
-`sentence-transformers/all-MiniLM-L6-v2` model when the `sentence-transformers`
+By default, `SynapseConfig.embedding_backend="auto"` uses the real multilingual
+`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` model when the `sentence-transformers`
 and `torch` extras are installed, and transparently falls back to a
 zero-dependency hash-based embedder otherwise — the engine always works, with
 or without the extras. Set `embedding_backend="hash"` to force the fast
@@ -160,9 +160,20 @@ dependency-free path (used by most of the test suite), or
 `embedding_backend="sentence-transformers"` to require the real model and fail
 loudly if it isn't available.
 
-All storage (vector, graph, sparse) is persisted to `storage_dir` on disk by
-default (`persist_on_write=True`); a fresh `SynapseEngine` pointed at the same
-`storage_dir` reloads all three indexes without re-ingesting. Set
+All storage (vector, graph, sparse) is persisted to a single SQLite file,
+`<storage_dir>/synapse.db`, by default (`persist_on_write=True`); writes are
+incremental and vectors are stored as compact binary blobs. A fresh `SynapseEngine`
+pointed at the same `storage_dir` reloads all three indexes without re-ingesting
+(indexes written by 0.1.x as JSON are read and migrated automatically).
+
+Tokenization is script-aware: text is lowercased, Serbian Cyrillic is transliterated
+to Latin and diacritics are stripped before indexing and querying, so "крађа",
+"krađa" and "kradja" match each other. Ingestion reads plain-text files only —
+extract text from PDF/DOCX first.
+
+Per-token (late-interaction) vectors dominate index size. For corpora beyond a few
+thousand chunks, `enable_late_chunking=False` (dense + graph + BM25) is roughly 7x
+smaller and ingests about 2x faster; see CHANGELOG 0.2.0 for measurements. Set
 `persist_on_write=False` to keep everything in memory until you explicitly
 call `engine.persist()`.
 
@@ -213,7 +224,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-16/16 tests currently pass, covering the storage engines, the full ingest →
+28/28 tests currently pass, covering the storage engines, the full ingest →
 retrieve → verify pipeline, disk persistence/reload, and per-connector
 edge cases (malformed tool calls, empty corpora, unknown tool/action names).
 CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on every
@@ -233,10 +244,12 @@ across the three retrieval channels rather than absolute semantic similarity
 — a single unrelated chunk can trivially rank #1 in the only channel that
 returns anything. `HallucinationCircuitBreaker` now cross-checks the raw
 dense cosine similarity of the top match against a second, absolute
-threshold (`SynapseConfig.min_semantic_similarity`, default `0.22`,
-calibrated against `all-MiniLM-L6-v2`'s ~0.15-0.2 noise floor for unrelated
-sentence pairs vs ~0.5+ for real matches) and trips the breaker if it falls
-short, whenever the dense channel actually ran. This gate is weaker on the
+threshold (`SynapseConfig.min_semantic_similarity`; default `None` = automatic:
+0.40 for neural dense cosine, 0.60 for neural ColBERT MaxSim, 0.22 for the hash
+embedder — provisionally calibrated for the multilingual MiniLM model, see the
+config docstring) and trips the breaker if it falls short, whenever the dense
+channel actually ran. It is a retrieval-level gate, not a guarantee: a query that
+shares vocabulary with the corpus can still pass it. This gate is weaker on the
 zero-dependency hash-embedding fallback, whose noise floor for short texts is
 higher (~0.35-0.4) and closer to genuine-match scores (~0.8) — it still adds
 protection there, just with a smaller margin.

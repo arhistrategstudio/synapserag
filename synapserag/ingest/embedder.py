@@ -10,6 +10,8 @@ import hashlib
 import math
 import re
 
+from ..text import word_tokens
+
 try:
     import numpy as np
     HAS_NUMPY = True
@@ -75,7 +77,7 @@ class MultiModalEmbedder:
 
     def _local_deterministic_dense(self, text: str) -> List[float]:
         """Aggregate token vectors with sub-word position and frequency weighting."""
-        tokens = re.findall(r"[a-zA-Z0-9_\-]+", text.lower())
+        tokens = word_tokens(text)
         if not tokens:
             return [0.0] * self.dim
 
@@ -91,7 +93,7 @@ class MultiModalEmbedder:
 
     def _local_deterministic_tokens(self, text: str) -> List[List[float]]:
         """Extract tokens and generate a vector for each token (for ColBERT Late Interaction)."""
-        tokens = re.findall(r"[a-zA-Z0-9_\-]+", text.lower())
+        tokens = word_tokens(text)
         if not tokens:
             return [self._normalize([1.0] * self.dim)]
         # Limit token matrix to reasonable length for embedded performance
