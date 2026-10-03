@@ -59,8 +59,9 @@ class FastGraphExtractor:
             if len(c) > 2:
                 entities.add(c)
 
-        # 2. Capitalized phrases & acronyms (Named Entities: e.g. "Personalized PageRank", "ColBERT", "GPU")
-        named_ents = re.findall(r"\b[A-Z][a-zA-Z0-9_\-]+(?:\s+[A-Z][a-zA-Z0-9_\-]+)*\b", text)
+        # 2. Capitalized phrases & acronyms (Named Entities: e.g. "Personalized PageRank", "ColBERT",
+        #    "Krivični zakonik", "Врховни суд"). Unicode-aware: any script's uppercase letter counts.
+        named_ents = self._capitalized_phrases(text)
         for ne in named_ents:
             clean = ne.strip()
             # Filter out common start-of-sentence words
@@ -72,4 +73,30 @@ class FastGraphExtractor:
         for q in quoted:
             entities.add(q)
 
-        return list(entities)[:20]  # Cap per chunk to avoid dense cliques
+        # Sorted for deterministic output (set iteration order varies between processes).
+        return sorted(entities)[:20]  # Cap per chunk to avoid dense cliques
+
+    @staticmethod
+    def _capitalized_phrases(text: str) -> List[str]:
+        """Runs of consecutive words starting with an uppercase letter (any script)."""
+        phrases: List[str] = []
+        run: List[str] = []
+        last_end = -1
+        for m in re.finditer(r"[^\W\d_][\w\-]*", text):
+            word = m.group(0)
+            gap = text[last_end:m.start()] if last_end >= 0 else ""
+            if word[0].isupper() and len(word) > 1:
+                if run and gap.strip() == "" and "\n" not in gap:
+                    run.append(word)
+                else:
+                    if run:
+                        phrases.append(" ".join(run))
+                    run = [word]
+            else:
+                if run:
+                    phrases.append(" ".join(run))
+                run = []
+            last_end = m.end()
+        if run:
+            phrases.append(" ".join(run))
+        return phrases

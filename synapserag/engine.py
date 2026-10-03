@@ -58,7 +58,10 @@ class SynapseEngine:
         self.citation_engine = CitationEngine()
         self.circuit_breaker = HallucinationCircuitBreaker(
             min_confidence_threshold=self.config.min_confidence_threshold,
-            min_semantic_similarity=self.config.min_semantic_similarity
+            min_semantic_similarity=self.config.resolve_semantic_floor(
+                neural_backend=self.embedding_backend is not None,
+                late_interaction=self.config.enable_late_chunking,
+            )
         )
 
     def _build_embedder(self) -> MultiModalEmbedder:
@@ -209,6 +212,10 @@ class SynapseEngine:
         circuit_triggered = False
         warning_msg = None
         if self.config.enable_circuit_breaker:
+            self.circuit_breaker.min_semantic_similarity = self.config.resolve_semantic_floor(
+                neural_backend=self.embedding_backend is not None,
+                late_interaction=self.retriever.last_dense_channel == "late_interaction",
+            )
             circuit_triggered, warning_msg = self.circuit_breaker.evaluate(matches)
 
         # Step 5: Deterministic Citations

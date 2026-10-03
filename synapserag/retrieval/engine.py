@@ -37,6 +37,9 @@ class TriBrainRetriever:
             vector_bias_weight=self.config.vector_bias_weight
         )
         self.fusion = ReciprocalRankFusion(k=self.config.rrf_k)
+        # Which similarity fed the "dense" channel in the last hybrid query
+        # ("late_interaction" | "dense" | None); used to pick the circuit-breaker floor.
+        self.last_dense_channel: Optional[str] = None
 
     def retrieve(
         self,
@@ -70,10 +73,13 @@ class TriBrainRetriever:
         # 1. Brain A (Dense / Late Interaction)
         if query_token_embeddings and len(self.vector_store.token_embeddings) > 0:
             dense_results = self.vector_store.search_late_interaction(query_token_embeddings, top_k=top_k * 2)
+            self.last_dense_channel = "late_interaction"
         elif query_vector:
             dense_results = self.vector_store.search_dense(query_vector, top_k=top_k * 2)
+            self.last_dense_channel = "dense"
         else:
             dense_results = []
+            self.last_dense_channel = None
 
         # 2. Brain B (Neuro-Associative Graph PPR)
         graph_results = self.graph_retriever.retrieve(

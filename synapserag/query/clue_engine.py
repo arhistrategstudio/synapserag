@@ -48,7 +48,7 @@ class MemoClueEngine:
             clues.append("Look for agent connectors, MCP server endpoints, tool calling interfaces, and protocol bindings.")
 
         # Extract primary noun phrases or keywords as a fallback clue
-        words = [w for w in re.findall(r"[a-zA-Z0-9_\-]+", clean) if len(w) > 3]
+        words = [w for w in re.findall(r"\w[\w\-]*", clean) if len(w) > 3]
         if words:
             clues.append(f"Trace relations and definitions around core symbols: {', '.join(words[:4])}")
 

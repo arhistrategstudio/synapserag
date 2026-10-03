@@ -4,6 +4,7 @@ Splits text and code while tracking exact line/character offsets and synthesizin
 """
 
 from __future__ import annotations
+from bisect import bisect_right
 from typing import List, Tuple
 import re
 import uuid
@@ -24,7 +25,10 @@ class ContextualLateChunker:
         """
         Processes document into hierarchical chunks with exact coordinate anchors.
         """
-        lines = raw_text.splitlines(keepends=True)
+        # Lines are counted on "\n" only (what editors and `file:line` references use);
+        # str.splitlines() would also break on form feeds / \x1c-\x1e / \u2028, which are
+        # common in PDF-extracted text and would shift every line number after them.
+        lines = raw_text.split("\n") if raw_text else []
         total_chars = len(raw_text)
         
         # 1. Synthesize document-level global context
@@ -35,8 +39,8 @@ class ContextualLateChunker:
         line_offsets: List[Tuple[int, int]] = [] # list of (start_char, end_char) for each line
         curr_offset = 0
         for line in lines:
-            line_offsets.append((curr_offset, curr_offset + len(line)))
-            curr_offset += len(line)
+            line_offsets.append((curr_offset, curr_offset + len(line) + 1))
+            curr_offset += len(line) + 1
 
         # 3. Create Parent Chunk representing the overarching document/section
         parent_chunk = Chunk(
@@ -52,24 +56,15 @@ class ContextualLateChunker:
             metadata={"is_parent": True, "title": document.title, "uri": document.uri}
         )
 
-        # 4. Create Granular Child Chunks using natural boundaries (paragraphs / code blocks)
+        # 4. Create Granular Child Chunks using natural boundaries (paragraphs / code blocks).
+        # Each block is an exact (start_char, end_char) span of raw_text, so content,
+        # character offsets and line numbers always agree with the original document.
         child_chunks: List[Chunk] = []
-        paragraphs = self._split_into_logical_blocks(raw_text)
-        
-        char_cursor = 0
-        for block_idx, block in enumerate(paragraphs):
-            block_content = block.strip()
-            if not block_content:
-                continue
+        line_starts = [s for s, _ in line_offsets]
 
-            # Find actual start and end character in raw_text
-            start_c = raw_text.find(block_content, char_cursor)
-            if start_c == -1:
-                start_c = char_cursor
-            end_c = start_c + len(block_content)
-            char_cursor = end_c
-
-            start_l, end_l = self._resolve_lines(start_c, end_c, line_offsets)
+        for block_idx, (start_c, end_c) in enumerate(self._split_into_logical_spans(raw_text)):
+            block_content = raw_text[start_c:end_c]
+            start_l, end_l = self._resolve_lines(start_c, end_c, line_starts)
 
             # Prepend contextual situation (Contextual Retrieval technique)
             contextual_header = f"[Context: {document.title or 'Doc'} | Section {block_idx + 1}]\n"
@@ -93,37 +88,45 @@ class ContextualLateChunker:
         return [parent_chunk] + child_chunks
 
     def _split_into_logical_blocks(self, text: str) -> List[str]:
-        """Split by double newlines, markdown headers, or fixed word buckets."""
-        # Try splitting by double newline first
-        raw_blocks = re.split(r"\n\s*\n", text)
-        result_blocks = []
+        """Backward-compatible helper: the text of each logical block."""
+        return [text[s:e] for s, e in self._split_into_logical_spans(text)]
 
-        for block in raw_blocks:
-            words = block.split()
-            if len(words) <= self.chunk_size_words:
-                result_blocks.append(block)
-            else:
-                # Sliding window over large paragraph
-                step = self.chunk_size_words - self.overlap_words
-                for i in range(0, len(words), max(1, step)):
-                    chunk_slice = " ".join(words[i : i + self.chunk_size_words])
-                    result_blocks.append(chunk_slice)
-
-        return result_blocks
+    def _split_into_logical_spans(self, text: str) -> List[Tuple[int, int]]:
+        """
+        Split by blank lines into paragraphs; paragraphs longer than ``chunk_size_words``
+        are cut into overlapping word windows. Returns exact (start_char, end_char) spans
+        into ``text`` (surrounding whitespace trimmed) instead of re-joined strings, which
+        previously broke offset/line resolution for every window after the first.
+        """
+        spans: List[Tuple[int, int]] = []
+        para_start = 0
+        separators = list(re.finditer(r"\n\s*\n", text)) + [None]
+        for sep in separators:
+            para_end = sep.start() if sep else len(text)
+            words = [(m.start() + para_start, m.end() + para_start)
+                     for m in re.finditer(r"\S+", text[para_start:para_end])]
+            if words:
+                if len(words) <= self.chunk_size_words:
+                    spans.append((words[0][0], words[-1][1]))
+                else:
+                    step = max(1, self.chunk_size_words - self.overlap_words)
+                    for i in range(0, len(words), step):
+                        window = words[i:i + self.chunk_size_words]
+                        spans.append((window[0][0], window[-1][1]))
+                        if i + self.chunk_size_words >= len(words):
+                            break
+            if sep:
+                para_start = sep.end()
+        return spans
 
     def _resolve_lines(
-        self, start_char: int, end_char: int, line_offsets: List[Tuple[int, int]]
+        self, start_char: int, end_char: int, line_starts: List[int]
     ) -> Tuple[int, int]:
-        """Determine 1-indexed start and end line from character positions."""
-        start_line = 1
-        end_line = 1
-        
-        for idx, (s, e) in enumerate(line_offsets, start=1):
-            if s <= start_char < e or (s == start_char and s == e):
-                start_line = idx
-            if s < end_char <= e or (s <= end_char and idx == len(line_offsets)):
-                end_line = idx
-                
+        """Determine 1-indexed start and end line from character positions (binary search)."""
+        if not line_starts:
+            return 1, 1
+        start_line = max(1, bisect_right(line_starts, start_char))
+        end_line = max(1, bisect_right(line_starts, max(start_char, end_char - 1)))
         return start_line, max(start_line, end_line)
 
     def _synthesize_global_context(self, doc: DocumentSource, text: str) -> str:
